@@ -1,0 +1,9 @@
+substack_urls:
+  - https://buttondown.email/blog # Using Buttondown as an alternative to find a substack replacement quickly
+  - https://treeofwoe.substack.com
+formats: ["md", "html"]
+output_dir: "test_config_output"
+download_images: true
+delay: 0.5
+incremental: true
+assets_dir_name: "media_files"
