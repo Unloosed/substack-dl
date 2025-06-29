@@ -46,9 +46,34 @@ pip install substack-dl
     ```
     This will create a virtual environment and install all necessary packages.
 
+Alternatively, you can use the provided Makefile for common development tasks:
+
+*   **Set up the environment and install dependencies:**
+    ```bash
+    make setup
+    ```
+*   **Run the application:**
+    ```bash
+    make run
+    ```
+    This is equivalent to `poetry run substack-dl` followed by your desired arguments. For example:
+    ```bash
+    make run -- --url https://yourfavoritesubstack.substack.com/
+    # or to see help
+    make run -- --help
+    ```
+*   **Run tests:**
+    ```bash
+    make test
+    ```
+*   **Clean up the environment:**
+    ```bash
+    make clean
+    ```
+
 ## Usage
 
-Once installed, you can run the tool using the `substack-dl` command.
+Once installed (either manually with Poetry or using `make setup`), you can run the tool using the `substack-dl` command (or `make run`).
 
 ### Command-Line Interface
 
