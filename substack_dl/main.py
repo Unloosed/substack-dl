@@ -12,11 +12,12 @@ import mimetypes
 from urllib.parse import urljoin, urlparse
 import argparse
 import logging
+import pypandoc
 
 # --- Default Configuration Values ---
 DEFAULT_CONFIG = {
     "substack_urls": [],
-    "formats": ["md"],
+    "formats": ["md", "json"],
     "output_dir": "substack_posts",
     "download_images": True,
     "incremental": False,
@@ -65,7 +66,7 @@ def init_argparse(config):
         metavar="FMT1,FMT2",
         type=str,
         default=",".join(config.get("formats", DEFAULT_CONFIG["formats"])),
-        help="Comma-separated list of output formats (e.g., md,html,json). Available: md, html."
+        help="Comma-separated list of output formats (e.g., md,html,json,pdf,epub). Available: md, html, json, pdf, epub."
     )
     parser.add_argument(
         "-o", "--output-dir",
@@ -624,13 +625,105 @@ def process_single_post(url, output_dir, formats_to_save, download_images_flag,
             elif fmt == "html":
                 meta_html_comment = f"<!--\n{yaml.dump(metadata, sort_keys=False, allow_unicode=True)}-->\n"
                 final_content = meta_html_comment + f"<h1>{metadata['title']}</h1>\n" + content_html_summary
+            elif fmt == "json":
+                # For JSON, we'll store metadata and the HTML content
+                json_data = {
+                    "metadata": metadata,
+                    "content_html": content_html_summary
+                }
+                final_content = json.dumps(json_data, indent=2, ensure_ascii=False)
+            elif fmt in ["pdf", "epub"]:
+                # For PDF and EPUB, convert HTML content using pypandoc
+                # Ensure that the output directory exists for pandoc
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                try:
+                    # We use content_html_summary which has image paths rewritten to be relative
+                    # to the output_dir where the HTML/MD files would be.
+                    # Pandoc, when converting from HTML, should be able to pick up these relative image paths
+                    # if its working directory is set correctly or if paths are understandable.
+                    # The `extract_media=True` option might be useful for some formats if pandoc is
+                    # downloading them, but here images are already local.
+                    # We'll convert the HTML (with potentially local image links) to the target format.
+                    # Pandoc needs to know the base path for relative resources if they are not in the
+                    # same directory as the input file (which is not the case here, as input is a string).
+                    # We can create a temporary HTML file to give pandoc a clear context for relative paths.
+
+                    temp_html_path = None
+                    # Create a full HTML document for pandoc to parse metadata and content correctly.
+                    full_html_for_pandoc = f"""
+                    <html>
+                    <head>
+                        <title>{metadata.get('title', 'Untitled Post')}</title>
+                        <meta name="author" content="{metadata.get('author', '')}">
+                        <meta name="date" content="{metadata.get('published_date', '')}">
+                    </head>
+                    <body>
+                        <h1>{metadata.get('title', 'Untitled Post')}</h1>
+                        {content_html_summary}
+                    </body>
+                    </html>
+                    """
+                    # pypandoc.convert_text can take a string directly.
+                    # For images to work, pandoc needs to be able to find them.
+                    # The images are in output_dir/assets_dir_name/post_assets_slug/
+                    # The output file (PDF/EPUB) is in output_dir/
+                    # Pandoc's working directory is typically where the script is run.
+                    # We might need to use --resource-path or ensure pandoc is run from output_dir.
+                    # Or, provide absolute paths to images in the HTML, but that's more complex.
+
+                    # Simplest approach: pypandoc converts HTML with relative image paths.
+                    # If these paths are relative to `output_dir`, it might work if pandoc
+                    # implicitly understands this or if we can hint at it.
+                    # Let's try converting directly first.
+                    # `extra_args` can be used to pass pandoc command line options.
+                    # The `outputfile` argument in `convert_text` handles saving.
+
+                    # Pandoc's default behavior is that relative paths are resolved relative to the *current working directory*.
+                    # Our image paths in content_html_summary are like: "assets_dir_name/post_assets_slug/image.jpg"
+                    # If the script is run from the repo root, pandoc needs to be told where these assets are.
+                    # One way is to change CWD for the pandoc call, or use `--resource-path`.
+                    # Let's try with resource_path. The resource path should be `output_dir`.
+                    # However, pypandoc doesn't directly expose --resource-path in convert_text in a simple way for multiple paths.
+                    # A more robust way: create a temporary HTML file *inside* output_dir,
+                    # so all relative paths are correct from its perspective.
+
+                    temp_html_filename = f"{formatted_date_prefix}_{clean_slug}_temp.html"
+                    temp_html_path = os.path.join(output_dir, temp_html_filename)
+
+                    with open(temp_html_path, "w", encoding="utf-8") as temp_f:
+                        temp_f.write(full_html_for_pandoc)
+
+                    # Now convert this temporary HTML file. Pandoc will resolve relative paths
+                    # (like "assets_dir_name/post_slug/image.png") from the location of this temp HTML file.
+                    pypandoc.convert_file(
+                        temp_html_path,
+                        fmt,  # to format (pdf or epub)
+                        outputfile=filepath,
+                        extra_args=['--embed-resources', '--standalone'] # Embed images and create a standalone file
+                    )
+                    logging.info(f"Successfully converted and saved: {filepath} using pandoc")
+
+                    if temp_html_path and os.path.exists(temp_html_path):
+                        os.remove(temp_html_path)
+
+                except Exception as e: # Catch pypandoc.PandocError or any other
+                    logging.error(f"Failed to convert to {fmt} for {url} using pandoc: {e}")
+                    # If pandoc is not installed, pypandoc.convert_text will raise an OSError/FileNotFoundError
+                    if "No pandoc was found" in str(e) or "pandoc executable not found" in str(e):
+                        logging.error("Pandoc is not installed or not found in PATH. Please install pandoc to use PDF/EPUB formats.")
+                        # We could try to skip further pandoc conversions for this run
+                    if temp_html_path and os.path.exists(temp_html_path): # Clean up temp file on error too
+                        os.remove(temp_html_path)
+                    continue # Skip to next format or post
             else:
                 logging.warning(f"Unknown format '{fmt}'. Skipping file: {filename}")
                 continue
 
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(final_content)
-            logging.info(f"Successfully saved: {filepath}")
+            # Common save logic for MD, HTML, JSON (PDF/EPUB are saved by pandoc directly)
+            if fmt not in ["pdf", "epub"]:
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(final_content)
+                logging.info(f"Successfully saved: {filepath}")
 
         time.sleep(request_delay)
 

@@ -15,6 +15,7 @@ markdownify = "^0.11.6"
 python-slugify = "^8.0.1"
 PyYAML = "^6.0.1"
 beautifulsoup4 = "^4.12.2"
+pypandoc = "^1.11"
 # For CLI - will choose one later, argparse is built-in
 # typer = {extras = ["all"], version = "^0.9.0"}
 # click = "^8.1.7"

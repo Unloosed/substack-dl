@@ -404,6 +404,18 @@ dev = ["pre-commit", "tox"]
 testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
+name = "pypandoc"
+version = "1.15"
+description = "Thin wrapper for pandoc."
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "pypandoc-1.15-py3-none-any.whl", hash = "sha256:4ededcc76c8770f27aaca6dff47724578428eca84212a31479403a9731fc2b16"},
+    {file = "pypandoc-1.15.tar.gz", hash = "sha256:ea25beebe712ae41d63f7410c08741a3cab0e420f6703f95bc9b3a749192ce13"},
+]
+
+[[package]]
 name = "pytest"
 version = "7.4.4"
 description = "pytest: simple powerful testing with Python"
@@ -674,4 +686,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.8"
-content-hash = "0f92136cfccf0fa08557383dac87933cb4e62813957d176ab470e6465ecffce1"
+content-hash = "f6860665bd03b6a8d99767df22132d70bd23cf898d2405c2faa92a20a5bff283"
